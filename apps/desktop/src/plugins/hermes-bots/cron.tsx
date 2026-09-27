@@ -16,6 +16,8 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  fmtClock,
+  fmtDateTime,
   GlyphSpinner,
   host,
   Input,
@@ -330,7 +332,7 @@ function scheduleLabel(schedule: string | undefined): string {
 function routineTimestamp(value: string | undefined): null | string {
   const ms = value ? new Date(value).getTime() : Number.NaN
 
-  return Number.isFinite(ms) ? `${relativeTime(ms)} · ${new Date(ms).toLocaleString()}` : null
+  return Number.isFinite(ms) ? `${relativeTime(ms)} · ${fmtDateTime.format(ms)}` : null
 }
 
 /** The scheduler's `last_status` literals, spelled out for the inspector. The
@@ -766,10 +768,8 @@ interface SchedulePickerProps {
 
 function SchedulePicker({ state, setState }: SchedulePickerProps) {
   const b = useBots()
-  const { locale } = useI18n()
-  const clock = new Intl.DateTimeFormat(locale, { hour: 'numeric', minute: '2-digit' })
-  const times = TIMES.map(time => ({ ...time, label: clock.format(new Date(2000, 0, 1, time.h, time.m)) }))
-  const timeLabel = times.find(time => time.id === state.time)?.label ?? clock.format(new Date(2000, 0, 1, 9, 0))
+  const times = TIMES.map(time => ({ ...time, label: fmtClock.format(new Date(2000, 0, 1, time.h, time.m)) }))
+  const timeLabel = times.find(time => time.id === state.time)?.label ?? fmtClock.format(new Date(2000, 0, 1, 9, 0))
 
   const upd = (patch: Partial<ScheduleState>) =>
     setState(prev => ({
