@@ -57,11 +57,52 @@ def verify_home(home: Path, configured: str) -> None:
 def verify_gateway_argv(argv: list[str], home: Path) -> None:
     from gateway.status import looks_like_gateway_command_line
 
-    # The installer wraps launchd stderr with this fixed, non-shell module.
-    if len(argv) > 7 and argv[1:4] == ["-m", "hermes_cli.stderr_timestamp", "--error-log"] and argv[5] == "--":
-        if not re.fullmatch(r"python(?:w|\d+(?:\.\d+)*)?(?:\.exe)?", Path(argv[0]).name.lower()):
-            _unverified()
-        argv = argv[6:]
+    # macOS launchd wraps the launch in /usr/bin/osascript to attribute network identity.
+    if len(argv) >= 3 and Path(argv[0]).name.lower() == "osascript":
+        script = None
+        for i, token in enumerate(argv):
+            if token == "-e" and i + 1 < len(argv):
+                script = argv[i + 1]
+                break
+        if script:
+            m = re.search(r"\$\.system\((.+?)\);", script)
+            if m:
+                arg_expr = m.group(1).strip()
+                try:
+                    import json
+                    shell_cmd = json.loads(arg_expr)
+                except Exception:
+                    shell_cmd = arg_expr.strip("\"'")
+            else:
+                m_as = re.search(r'do shell script "(.*)"', script)
+                if m_as:
+                    shell_cmd = m_as.group(1).replace('\\"', '"').replace('\\\\', '\\')
+                else:
+                    shell_cmd = None
+            if shell_cmd:
+                tokens = shlex.split(shell_cmd)
+                if tokens and tokens[0] == "exec":
+                    tokens = tokens[1:]
+                clean = []
+                skip = False
+                for t in tokens:
+                    if t in (">>", ">", "2>>", "2>"):
+                        skip = True
+                    elif skip:
+                        skip = False
+                    else:
+                        clean.append(t)
+                argv = clean
+
+    # The installer wraps launchd stderr with stderr_timestamp (via python -m or hermes --run-module).
+    if len(argv) > 5 and "--" in argv:
+        is_mod = (
+            (argv[1:3] == ["-m", "hermes_cli.stderr_timestamp"] and re.fullmatch(r"python(?:w|\d+(?:\.\d+)*)?(?:\.exe)?", Path(argv[0]).name.lower()))
+            or (argv[1:3] in (["--run-module", "hermes_cli.stderr_timestamp"], ["-m", "hermes_cli.stderr_timestamp"]) and Path(argv[0]).name.lower() in {"hermes", "hermes.exe"})
+        )
+        if is_mod:
+            sep_idx = argv.index("--")
+            argv = argv[sep_idx + 1:]
     if not argv or not looks_like_gateway_command_line(subprocess_command(argv)):
         _unverified()
     executable = Path(argv[0]).name.lower()
