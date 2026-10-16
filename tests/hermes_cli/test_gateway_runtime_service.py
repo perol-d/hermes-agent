@@ -317,6 +317,30 @@ def test_gateway_wrapper_requires_actual_python_entrypoint(outer, tmp_path):
         verify_gateway_argv(argv, tmp_path)
 
 
+def test_verify_gateway_argv_unwraps_launchd_osascript(tmp_path):
+    from hermes_cli.gateway_runtime_service_identity import verify_gateway_argv
+    # macOS launchd JXA wrapper format
+    argv = [
+        "/usr/bin/osascript",
+        "-l",
+        "JavaScript",
+        "-e",
+        f'$.system("exec {sys.executable} -m hermes_cli.main gateway run --quiet");',
+    ]
+    verify_gateway_argv(argv, tmp_path)
+
+
+def test_verify_gateway_argv_raises_on_incorrect_osascript_command(tmp_path):
+    from hermes_cli.gateway_runtime_service_identity import verify_gateway_argv
+    argv = [
+        "/usr/bin/osascript",
+        "-e",
+        '$.system("exec /bin/echo not_gateway_command");',
+    ]
+    with pytest.raises(ValueError, match="service_identity_unverified"):
+        verify_gateway_argv(argv, tmp_path)
+
+
 def test_android_python_reaches_the_unmanaged_start(tmp_path, monkeypatch):
     """Termux is supported and has no service manager; Python 3.13+ there reports
     sys.platform == "android". Ensure must start the gateway unmanaged, not refuse the platform."""
